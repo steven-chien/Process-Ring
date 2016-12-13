@@ -167,8 +167,11 @@ int main(int argc, char *argv[])
 	debug = 0;
 
 	/* extract cmd arguments */
-	while((c=getopt(argc, argv, "dp:r:")) != -1) {
+	while((c=getopt(argc, argv, "dp:r:h")) != -1) {
 		switch (c) {
+			case 'h':
+				fprintf(stderr, "Usage: ./ring_thread -p [thread count] -r [rounds]\n");
+				return 0;
 			case 'd':
 				debug = 1;
 				break;
