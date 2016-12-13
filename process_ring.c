@@ -21,6 +21,8 @@ void ring_process(int id, int rounds, int *left, int *right, int *report_channel
 	
 	if(debug)
 		fprintf(stderr, "Process %d(%d) started!\n", id, pid);
+
+	/* alert parent that process is initialized and ready */
 	close(report_channel[0]);
 	write(report_channel[1], &ready_flag, sizeof(int));
 
@@ -87,8 +89,11 @@ int main(int argc, char *argv[])
 	int rounds=5, process_count=5, c;
 	debug = 0;
 
-	while((c=getopt(argc, argv, "dp:r:")) != -1) {
+	while((c=getopt(argc, argv, "dp:r:h")) != -1) {
 		switch (c) {
+			case 'h':
+				fprintf(stderr, "Usage: ./process_ring.out -p [process count] -r [rounds], optionally -d for debug message.\n");
+				return 0;
 			case 'd':
 				debug = 1;
 				break;
@@ -113,7 +118,7 @@ int main(int argc, char *argv[])
 	}
 
 	if(debug)
-		fprintf(stderr, "Circulate tokens for %d rounds between %d process(es)\n", rounds, process_count);
+		fprintf(stderr, "Circulate token for %d rounds between %d processes\n", rounds, process_count);
 	
 	/* create pipes (to connect processes) and fork pid placeholder */
 	int **pipes, **report_channel;
