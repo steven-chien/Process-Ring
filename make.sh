@@ -1,3 +1,3 @@
 #!/bin/bash
 
-gcc -o ring.out -std=gnu99 -g -Wall -lpthread ring.c
+gcc -o ring_thread.out -std=gnu99 -g -Wall -lpthread ring_thread.c
