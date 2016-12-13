@@ -11,12 +11,18 @@
 
 int debug;
 
-void ring_process(int id, int rounds, int* left, int* right)
+void ring_process(int id, int rounds, int *left, int *right, int *report_channel)
 {
 	/* close read end on left hand side and make sure parent is alive */
 	int pid = getpid();
+	int ready_flag = 1;
 	char msg[MSG_SIZE];
 	close(left[1]);
+	
+	if(debug)
+		fprintf(stderr, "Process %d(%d) started!\n", id, pid);
+	close(report_channel[0]);
+	write(report_channel[1], &ready_flag, sizeof(int));
 
 	/* check if parent is still alive and watch the read end of left hand side pipe for message from neighbor */
 	while(getppid()!=1 && (read(left[0], msg, sizeof(msg)))>0 && rounds>0) {
@@ -56,7 +62,7 @@ double master(int *pipe)
 	snprintf(msg, MSG_SIZE, "%d;%d", getpid(), 1);
 
 	if(debug)
-		fprintf(stderr, "Parent(%d) kick starting process by inserting token message %s...\n", getpid(), msg);
+		fprintf(stderr, "Parent(%d) kick starting by inserting token message %s...\n", getpid(), msg);
 
 	/* take time */
 	clock_gettime(CLOCK_MONOTONIC, &start_time);
@@ -110,13 +116,18 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Circulate tokens for %d rounds between %d process(es)\n", rounds, process_count);
 	
 	/* create pipes (to connect processes) and fork pid placeholder */
-	int **pipes;
+	int **pipes, **report_channel;
 	int pid;
 
 	pipes = (int**)malloc(sizeof(int*)*process_count);
+	report_channel = (int**)malloc(sizeof(int*)*process_count);
+
 	for(int i=0; i<process_count; i++) {
 		pipes[i] = (int*)malloc(sizeof(int)*2);
+		report_channel[i] = (int*)malloc(sizeof(int)*2);
+
 		pipe(pipes[i]);
+		pipe(report_channel[i]);
 	}
 
 	/* fork children and kick start ring process */
@@ -125,15 +136,30 @@ int main(int argc, char *argv[])
 		
 		if(pid==0) {
 			if(i==process_count-1)
-				ring_process(i, rounds, pipes[0], pipes[i]);
+				ring_process(i, rounds, pipes[0], pipes[i], report_channel[i]);
 			else
-				ring_process(i, rounds, pipes[i+1], pipes[i]);
+				ring_process(i, rounds, pipes[i+1], pipes[i], report_channel[i]);
 			break;
 		}
-	 }
+	}
 
-	/* writing token message to to first child to kick start process */
 	if(pid!=0) {
+		/* wait for all children to be ready (like pthread_barrier) */
+		int ready_count = 0;
+		while(ready_count<process_count) {
+			int msg = 0;
+			read(report_channel[ready_count][0], &msg, sizeof(int));
+
+			if(msg==1) {
+				ready_count++;
+			}
+			else {
+				fprintf(stderr, "Received error from child, exiting...\n");
+				return 1;
+			}
+		}
+
+		/* writing token message to to first child to kick start process */
 		double elasped = master(pipes[0]);
 		printf("Time elasped: %lf seconds\n", elasped);
 	}
@@ -141,8 +167,10 @@ int main(int argc, char *argv[])
 	/* cleanup */
 	for(int i=0; i<process_count; i++) {
 		free(pipes[i]);
+		free(report_channel[i]);
 	}
 	free(pipes);
+	free(report_channel);
 
 	return 0;
 }

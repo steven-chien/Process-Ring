@@ -143,7 +143,6 @@ double benc(int p, int r)
 
 	/* stop timer */
 	clock_gettime(CLOCK_MONOTONIC, &end_time);
-	printf("start: %ld.%ld; end: %ld.%ld\n", start_time.tv_sec, start_time.tv_nsec, end_time.tv_sec, end_time.tv_nsec);
 
 	/* cleanup */
 	pthread_barrier_destroy(&barrier);
@@ -199,7 +198,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "circulate tokens for %d rounds between %d threads\n", rounds, thread_count);
 
 	double time = benc(rounds, thread_count);
-	printf("seconds elasped: %lf\n", time);
+	printf("Time elasped: %lf seconds\n", time);
 
 	return 0;
 }
