@@ -2,8 +2,11 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <time.h>
+#include <string.h>
 #include <pthread.h>
 #include <unistd.h>
+
+#define MSG_SIZE 50
 
 /* global barrier and debug flag */
 pthread_barrier_t barrier;
@@ -11,7 +14,7 @@ int debug;
 
 /* structure for placeholders between threads */
 typedef struct synch_t {
-	int token;
+	char msg[MSG_SIZE];
 	pthread_mutex_t mtx;
 } synch_t;
 
@@ -34,15 +37,15 @@ void *ring_process(void *arg)
 	int id = ((proc_arg_t*)arg)->id;
 
 	/* extract pointer to token placeholder in left and right */
-	int *prev_token = &(((proc_arg_t*)arg)->right->token);
-	int *next_token = &(((proc_arg_t*)arg)->left->token);
+	char *prev_msg = (((proc_arg_t*)arg)->right->msg);
+	char *next_msg = (((proc_arg_t*)arg)->left->msg);
 
 	/* extract mutex lock of placeholder from left and right */
 	pthread_mutex_t *prev_mtxp = &(((proc_arg_t*)arg)->right->mtx);
 	pthread_mutex_t *next_mtxp = &(((proc_arg_t*)arg)->left->mtx);
 
 	if(debug)
-		fprintf(stderr, "thread %d started\n", id);
+		fprintf(stderr, "Thread %d started!\n", id);
 
 	/* wait for all other threads before begin */
 	pthread_barrier_wait(&barrier);
@@ -52,16 +55,26 @@ void *ring_process(void *arg)
 		/* acquire mutex of token */
 		pthread_mutex_lock(prev_mtxp);
 
+		/* extracting sender and token from sender */
+		int sender, token;
+		char *tokenizer_state;
+
+		char *tokenizer = strtok_r(prev_msg, ";", &tokenizer_state);
+		sender = atoi(tokenizer);
+		tokenizer = strtok_r(NULL, ";", &tokenizer_state);
+		token = atoi(tokenizer);
+
 		/* check if token is there */
 		if(debug)
-			fprintf(stderr, "I'm %d in round %d, token is %d, I received %d, ", id, rounds, *next_token, *prev_token);
-	
-		*next_token = *prev_token + 1;	// work with token before passing on
+			fprintf(stderr, "I'm %d in round %d, I received %d from %d, ", id, rounds, token, sender);
 
 		/* remove token and unlock previous */
-		*prev_token = -1;
+		token++;
+		snprintf(prev_msg, MSG_SIZE, "-1;-1");
+		snprintf(next_msg, MSG_SIZE, "%d;%d", id, token);
+
 		if(debug)
-			fprintf(stderr, "Exchange performed, now token is %d, prev token is %d, unlock next thread!\n", *next_token, *prev_token);
+			fprintf(stderr, "pass on message %s and unlock next thread!\n", next_msg);
 		
 		/* unlock mutex of next placeholder to signal the next thread */
 		pthread_mutex_unlock(next_mtxp);
@@ -69,7 +82,6 @@ void *ring_process(void *arg)
 		rounds--;
 	}
 
-	
 	return NULL;
 }
 
@@ -93,7 +105,7 @@ double benc(int p, int r)
 		arg[i] = (proc_arg_t*)malloc(sizeof(proc_arg_t));
 
 		placeholders[i] = (synch_t*)malloc(sizeof(synch_t));
-		placeholders[i]->token = -1;
+		snprintf(placeholders[i]->msg, MSG_SIZE, "-1;-1");;
 
 		pthread_mutex_init(&(placeholders[i]->mtx), NULL);
 		pthread_mutex_lock(&(placeholders[i]->mtx));	// lock all mutex so all processes will be waiting except the one that's active
@@ -117,7 +129,7 @@ double benc(int p, int r)
 	}
 
 	/* take lock of one placeholder */
-	placeholders[0]->token = 0;	// init the token from the first placeholder
+	snprintf(placeholders[0]->msg, MSG_SIZE, "-1;0");	// init the token from the first placeholder
 	pthread_mutex_unlock(&(placeholders[0]->mtx));	// unlock the first mutex so that it starts from the first thread
 
 	/* create all thread */
@@ -146,12 +158,14 @@ double benc(int p, int r)
 
 	/* cleanup */
 	pthread_barrier_destroy(&barrier);
+
 	for(int i=0; i<p; i++) {
 		pthread_mutex_destroy(&(placeholders[i]->mtx));
 		free(placeholders[i]);
 		free(arg[i]);
 		free(threads[i]);
 	}
+
 	free(placeholders);
 	free(arg);
 	free(threads);
@@ -195,7 +209,7 @@ int main(int argc, char *argv[])
 	}
 
 	if(debug)
-		fprintf(stderr, "circulate tokens for %d rounds between %d threads\n", rounds, thread_count);
+		fprintf(stderr, "Circulate token for %d rounds between %d threads\n", rounds, thread_count);
 
 	double time = benc(rounds, thread_count);
 	printf("Time elasped: %lf seconds\n", time);
