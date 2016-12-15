@@ -24,6 +24,8 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/prctl.h>
+#include <errno.h>
 
 #define MSG_SIZE 50
 
@@ -32,6 +34,7 @@ int debug;
 void ring_process(int id, int rounds, int *left, int *right, int *report_channel)
 {
 	/* close read end on left hand side and make sure parent is alive */
+	//prctl(PR_SET_PDEATHSIG, SIGHUP);
 	int pid = getpid();
 	int ready_flag = 1;
 	char msg[MSG_SIZE];
@@ -45,7 +48,7 @@ void ring_process(int id, int rounds, int *left, int *right, int *report_channel
 	write(report_channel[1], &ready_flag, sizeof(int));
 
 	/* check if parent is still alive and watch the read end of left hand side pipe for message from neighbor */
-	while(getppid()!=1 && (read(left[0], msg, sizeof(msg)))>0 && rounds>0) {
+	while(rounds>0 && read(left[0], msg, sizeof(msg))>0 && getppid()!=1) {
 		int token, sender;
 
 		/* extract sender PID and token from message */
@@ -92,7 +95,10 @@ double master(int *pipe)
 	write(pipe[1], msg, sizeof(msg));
 
 	/* wait for all children */
-	wait(NULL);
+	int status = 0, wpid = 0;
+	while ((wpid = wait(&status)) > 0) {
+		printf("process %d exit with status %d\n", wpid, status);
+	}
 
 	/* take end time */
 	clock_gettime(CLOCK_MONOTONIC, &end_time);
